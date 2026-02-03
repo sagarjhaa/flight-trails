@@ -109,14 +109,36 @@ class FlightTrailsApp {
         
         try {
             const url = `https://opensky-network.org/api/states/all?lamin=${params.lamin}&lomin=${params.lomin}&lamax=${params.lamax}&lomax=${params.lomax}`;
-            const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
-            const data = await response.json();
             
-            if (data.states) {
+            // Try multiple CORS proxies
+            const proxies = [
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+                `https://corsproxy.io/?${encodeURIComponent(url)}`,
+                `https://cors-anywhere.herokuapp.com/${url}`
+            ];
+            
+            let data = null;
+            for (const proxyUrl of proxies) {
+                try {
+                    const response = await fetch(proxyUrl);
+                    if (response.ok) {
+                        data = await response.json();
+                        if (data.states) break;
+                    }
+                } catch (err) {
+                    console.log('Proxy failed, trying next:', err);
+                }
+            }
+            
+            if (data && data.states) {
                 this.processFlights(data.states);
+            } else {
+                console.log('All proxies failed, showing demo data');
+                this.showDemoFlights();
             }
         } catch (e) {
             console.error('API error:', e);
+            this.showDemoFlights();
         }
         
         loading.classList.add('hidden');
@@ -176,6 +198,33 @@ class FlightTrailsApp {
             const avg = Array.from(this.flights.values()).reduce((s, f) => s + f.altitude, 0) / this.flights.size;
             document.getElementById('avg-altitude').textContent = Math.round(avg).toLocaleString();
         }
+    }
+    
+    showDemoFlights() {
+        // Demo flights when API fails
+        const center = this.map.getCenter();
+        const demoFlights = [];
+        
+        for (let i = 0; i < 50; i++) {
+            const lat = center.lat + (Math.random() - 0.5) * 10;
+            const lon = center.lng + (Math.random() - 0.5) * 15;
+            const heading = Math.random() * 360;
+            const hdg = heading * Math.PI / 180;
+            
+            demoFlights.push([
+                `demo${i}`,
+                `DEMO${1000+i}`,
+                'Demo',
+                null, null,
+                lon, lat,
+                10000 + Math.random() * 5000,
+                false,
+                200 + Math.random() * 100,
+                heading
+            ]);
+        }
+        
+        this.processFlights(demoFlights);
     }
     
     latLonToPixel(lat, lon) {
