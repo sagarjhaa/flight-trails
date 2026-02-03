@@ -407,30 +407,63 @@ class FlightTrailsApp {
     }
     
     updateTrails() {
-        const maxTrailLength = 60; // Number of trail points
+        const maxTrailLength = 100; // Number of trail points
         
         this.flights.forEach((flight, id) => {
             const trail = this.trails.get(id);
             if (!trail) return;
             
-            // Add current position to trail
+            // Simulate movement based on heading and velocity
+            // Scale factor adjusted for zoom level visibility
+            const zoomLevel = this.map.getZoom();
+            const zoomScale = Math.pow(2, zoomLevel - 6) * 0.3; // Scale with zoom
+            const speedFactor = 0.00005 * this.animationSpeed * (flight.velocity / 400);
+            const headingRad = flight.heading * Math.PI / 180;
+            
+            // Calculate projected position based on heading
+            const projectedLat = flight.lat + Math.cos(headingRad) * speedFactor;
+            const projectedLon = flight.lon + Math.sin(headingRad) * speedFactor;
+            
             const pos = { 
-                lat: flight.lat, 
-                lon: flight.lon, 
+                lat: projectedLat, 
+                lon: projectedLon, 
                 altitude: flight.altitude,
                 timestamp: Date.now()
             };
             
-            // Only add if moved significantly
-            if (trail.length === 0 || 
-                Math.abs(trail[trail.length - 1].lat - pos.lat) > 0.001 ||
-                Math.abs(trail[trail.length - 1].lon - pos.lon) > 0.001) {
-                trail.push(pos);
+            // Initialize with a trail behind the plane
+            if (trail.length === 0) {
+                for (let i = 50; i >= 0; i--) {
+                    trail.push({
+                        lat: flight.lat - Math.cos(headingRad) * speedFactor * i * 1.5,
+                        lon: flight.lon - Math.sin(headingRad) * speedFactor * i * 1.5,
+                        altitude: flight.altitude,
+                        timestamp: Date.now() - i * 50
+                    });
+                }
             }
+            
+            trail.push(pos);
             
             // Trim old trail points
             while (trail.length > maxTrailLength) {
                 trail.shift();
+            }
+            
+            // Update flight position for smooth animation
+            flight.lat = projectedLat;
+            flight.lon = projectedLon;
+        });
+        
+        // Update marker positions to match animated positions
+        this.updateMarkerPositions();
+    }
+    
+    updateMarkerPositions() {
+        this.flights.forEach((flight, id) => {
+            const marker = this.markers.get(id);
+            if (marker) {
+                marker.setLatLng([flight.lat, flight.lon]);
             }
         });
     }
@@ -441,68 +474,99 @@ class FlightTrailsApp {
         
         if (!this.showTrails) return;
         
-        // Draw trails for each flight
-        this.trails.forEach((trail, id) => {
-            if (trail.length < 2) return;
-            
-            const flight = this.flights.get(id);
-            if (!flight) return;
-            
-            this.drawContrail(trail, flight);
+        // Draw contrails for each flight
+        this.flights.forEach((flight, id) => {
+            this.drawContrail(null, flight);
         });
     }
     
     drawContrail(trail, flight) {
         const ctx = this.ctx;
         
-        // Convert trail points to screen coordinates
-        const points = trail.map(p => this.latLonToPixel(p.lat, p.lon));
+        // Get current plane position in screen coordinates
+        const planePos = this.latLonToPixel(flight.lat, flight.lon);
         
-        if (points.length < 2) return;
+        // Calculate trail length based on velocity and zoom
+        const zoomLevel = this.map.getZoom();
+        const trailLength = 25 + (flight.velocity / 15) + (zoomLevel * 5);
         
-        // Draw multiple layers for the contrail effect
-        this.drawTrailLayer(points, flight.altitude, 0.15, 12);  // Outer glow
-        this.drawTrailLayer(points, flight.altitude, 0.25, 8);   // Mid glow
-        this.drawTrailLayer(points, flight.altitude, 0.5, 4);    // Inner glow
-        this.drawTrailLayer(points, flight.altitude, 0.8, 2);    // Core
+        // Calculate direction (opposite of heading for trail behind)
+        const headingRad = (flight.heading - 90) * Math.PI / 180;
+        
+        // Create trail points in screen space going backwards from plane
+        const numPoints = 50;
+        const points = [];
+        
+        for (let i = 0; i <= numPoints; i++) {
+            const t = i / numPoints;
+            // Trail curves slightly and gets thinner
+            const wobble = Math.sin(t * 4 + Date.now() / 500) * t * 3;
+            const x = planePos.x - Math.cos(headingRad) * trailLength * t + Math.sin(headingRad) * wobble;
+            const y = planePos.y - Math.sin(headingRad) * trailLength * t - Math.cos(headingRad) * wobble;
+            points.push({ x, y, t });
+        }
+        
+        // Draw multiple layers for the contrail effect - beautiful fading glow
+        this.drawTrailLayer(points, flight.altitude, 0.05, 24);  // Outer soft glow
+        this.drawTrailLayer(points, flight.altitude, 0.12, 16);  // Mid glow  
+        this.drawTrailLayer(points, flight.altitude, 0.25, 10);  // Inner glow
+        this.drawTrailLayer(points, flight.altitude, 0.5, 5);    // Bright core
+        this.drawTrailLayer(points, flight.altitude, 0.8, 2);    // Hot center
+        
+        // Draw engine glow at plane position
+        this.drawEngineGlow(planePos, flight);
     }
     
-    drawTrailLayer(points, altitude, baseAlpha, lineWidth) {
+    drawTrailLayer(points, altitude, baseAlpha, maxWidth) {
         const ctx = this.ctx;
         
-        // Altitude affects trail brightness (higher = more visible)
-        const altFactor = Math.min(1, altitude / 35000);
+        // Altitude affects trail brightness (higher = more visible contrails)
+        const altFactor = Math.min(1, Math.max(0.3, altitude / 38000));
+        
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
         
         for (let i = 1; i < points.length; i++) {
-            const progress = i / points.length;
-            const alpha = baseAlpha * progress * (0.5 + altFactor * 0.5);
+            const prev = points[i - 1];
+            const curr = points[i];
+            const progress = 1 - curr.t; // Fade from plane to tail
             
-            // Fade width toward tail
-            const width = lineWidth * (0.3 + progress * 0.7);
+            // Alpha fades out toward tail
+            const alpha = baseAlpha * Math.pow(progress, 0.7) * (0.5 + altFactor * 0.5);
+            
+            // Width tapers toward tail
+            const width = maxWidth * (0.1 + Math.pow(progress, 0.5) * 0.9);
             
             ctx.beginPath();
-            ctx.moveTo(points[i - 1].x, points[i - 1].y);
-            ctx.lineTo(points[i].x, points[i].y);
+            ctx.moveTo(prev.x, prev.y);
+            ctx.lineTo(curr.x, curr.y);
             
-            // Blue contrail color with altitude variation
-            const hue = 200 + altFactor * 20; // 200-220 (blue range)
-            const lightness = 60 + altFactor * 20;
-            ctx.strokeStyle = `hsla(${hue}, 90%, ${lightness}%, ${alpha})`;
+            // Blue contrail color - ice crystal appearance
+            const hue = 200 + altFactor * 15;
+            const saturation = 80 + progress * 20;
+            const lightness = 60 + altFactor * 25;
+            
+            ctx.strokeStyle = `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`;
             ctx.lineWidth = width;
-            ctx.lineCap = 'round';
             ctx.stroke();
         }
+    }
+    
+    drawEngineGlow(pos, flight) {
+        const ctx = this.ctx;
+        const pulse = 0.6 + Math.sin(Date.now() / 100 + flight.heading) * 0.4;
         
-        // Add sparkle effect at the head
-        if (points.length > 0) {
-            const head = points[points.length - 1];
-            const sparkleAlpha = 0.3 + Math.sin(Date.now() / 200) * 0.2;
-            
-            ctx.beginPath();
-            ctx.arc(head.x, head.y, 3, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(255, 255, 255, ${sparkleAlpha})`;
-            ctx.fill();
-        }
+        // Outer glow
+        const gradient = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 12);
+        gradient.addColorStop(0, `rgba(255, 255, 255, ${pulse * 0.9})`);
+        gradient.addColorStop(0.3, `rgba(180, 220, 255, ${pulse * 0.5})`);
+        gradient.addColorStop(0.7, `rgba(100, 180, 255, ${pulse * 0.2})`);
+        gradient.addColorStop(1, 'rgba(80, 160, 255, 0)');
+        
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 12, 0, Math.PI * 2);
+        ctx.fillStyle = gradient;
+        ctx.fill();
     }
 }
 
