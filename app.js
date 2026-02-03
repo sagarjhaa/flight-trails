@@ -348,28 +348,26 @@ class FlightTrailsApp {
         const ctx = this.ctx;
         const trail = flight.trail;
         
-        // Draw trail - darker/visible near plane, fades to almost invisible
-        for (let i = 1; i < trail.length; i++) {
-            const prev = this.latLonToPixel(trail[i-1].lat, trail[i-1].lon);
-            const curr = this.latLonToPixel(trail[i].lat, trail[i].lon);
-            
-            // t = 0 at tail (old), t = 1 near plane (new)
-            const t = i / trail.length;
-            
-            // Only visible near plane, very faint at tail
-            const alpha = Math.pow(t, 2) * 0.4; // Lighter overall, concentrated near plane
-            const width = 0.5 + t * 1; // Very thin: 0.5-1.5px
-            
-            ctx.beginPath();
-            ctx.moveTo(prev.x, prev.y);
-            ctx.lineTo(curr.x, curr.y);
-            
-            // Light blue, very subtle
-            ctx.strokeStyle = `rgba(120, 200, 255, ${alpha})`;
-            ctx.lineWidth = width;
-            ctx.lineCap = 'round';
-            ctx.stroke();
-        }
+        if (trail.length < 2) return;
+        
+        // Draw one straight line from oldest point to plane
+        const start = this.latLonToPixel(trail[0].lat, trail[0].lon);
+        const end = this.latLonToPixel(flight.currentLat, flight.currentLon);
+        
+        // Create gradient from faint (tail) to visible (plane)
+        const gradient = ctx.createLinearGradient(start.x, start.y, end.x, end.y);
+        gradient.addColorStop(0, 'rgba(100, 180, 255, 0)');      // Invisible at tail
+        gradient.addColorStop(0.5, 'rgba(100, 180, 255, 0.15)'); // Faint middle
+        gradient.addColorStop(0.85, 'rgba(120, 200, 255, 0.4)'); // More visible
+        gradient.addColorStop(1, 'rgba(150, 220, 255, 0.6)');    // Visible near plane
+        
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = 'round';
+        ctx.stroke();
     }
     
     drawPlane(flight) {
