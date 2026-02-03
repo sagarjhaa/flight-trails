@@ -108,11 +108,14 @@ class FlightTrailsApp {
         // Clear existing flights
         this.flights.clear();
         
-        // Update map view
+        // Update map view - this triggers moveend which loads flights
         this.map.setView(region.center, region.zoom);
         
         // Update title
         document.querySelector('#header h1').textContent = `✈️ ${region.name} Flight Trails`;
+        
+        // Force reload flights for new region
+        setTimeout(() => this.loadFlights(), 100);
     }
     
     onMapMove() {
@@ -326,13 +329,17 @@ class FlightTrailsApp {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
+        // Draw trails FIRST (behind planes)
+        if (this.showTrails) {
+            this.flights.forEach(flight => {
+                if (flight.trail.length > 1) {
+                    this.drawTrail(flight);
+                }
+            });
+        }
+        
+        // Draw planes ON TOP
         this.flights.forEach(flight => {
-            // Draw trail
-            if (this.showTrails && flight.trail.length > 1) {
-                this.drawTrail(flight);
-            }
-            
-            // Draw plane
             this.drawPlane(flight);
         });
     }
@@ -341,39 +348,26 @@ class FlightTrailsApp {
         const ctx = this.ctx;
         const trail = flight.trail;
         
+        // Draw trail - darker/visible near plane, fades to almost invisible
         for (let i = 1; i < trail.length; i++) {
             const prev = this.latLonToPixel(trail[i-1].lat, trail[i-1].lon);
             const curr = this.latLonToPixel(trail[i].lat, trail[i].lon);
             
-            // Progress along trail (0 = old, 1 = new)
+            // t = 0 at tail (old), t = 1 near plane (new)
             const t = i / trail.length;
             
-            // Fade out toward tail - NARROWER streaks
-            const alpha = Math.pow(t, 0.5) * 0.7;
-            const width = 1 + t * 2; // Much narrower: 1-3px instead of bigger
+            // Only visible near plane, very faint at tail
+            const alpha = Math.pow(t, 2) * 0.4; // Lighter overall, concentrated near plane
+            const width = 0.5 + t * 1; // Very thin: 0.5-1.5px
             
             ctx.beginPath();
             ctx.moveTo(prev.x, prev.y);
             ctx.lineTo(curr.x, curr.y);
             
-            // Blue contrail
-            ctx.strokeStyle = `rgba(100, 200, 255, ${alpha})`;
+            // Light blue, very subtle
+            ctx.strokeStyle = `rgba(120, 200, 255, ${alpha})`;
             ctx.lineWidth = width;
             ctx.lineCap = 'round';
-            ctx.stroke();
-        }
-        
-        // Subtle glow layer
-        for (let i = 1; i < trail.length; i++) {
-            const prev = this.latLonToPixel(trail[i-1].lat, trail[i-1].lon);
-            const curr = this.latLonToPixel(trail[i].lat, trail[i].lon);
-            const t = i / trail.length;
-            
-            ctx.beginPath();
-            ctx.moveTo(prev.x, prev.y);
-            ctx.lineTo(curr.x, curr.y);
-            ctx.strokeStyle = `rgba(150, 220, 255, ${t * 0.15})`;
-            ctx.lineWidth = width + 4;
             ctx.stroke();
         }
     }
