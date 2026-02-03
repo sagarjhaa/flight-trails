@@ -11,6 +11,22 @@ class FlightTrailsApp {
         // Current view bounds
         this.currentBounds = null;
         
+        // Region presets
+        this.regions = {
+            'california': { center: [37.5, -119.5], zoom: 6, name: 'California' },
+            'usa': { center: [39.8, -98.5], zoom: 4, name: 'United States' },
+            'india': { center: [22.5, 78.9], zoom: 5, name: 'India' },
+            'europe': { center: [50.0, 10.0], zoom: 4, name: 'Europe' },
+            'uk': { center: [54.0, -2.0], zoom: 6, name: 'United Kingdom' },
+            'japan': { center: [36.5, 138.0], zoom: 6, name: 'Japan' },
+            'australia': { center: [-25.0, 135.0], zoom: 4, name: 'Australia' },
+            'china': { center: [35.0, 105.0], zoom: 4, name: 'China' },
+            'brazil': { center: [-14.0, -52.0], zoom: 4, name: 'Brazil' },
+            'middle-east': { center: [25.0, 45.0], zoom: 5, name: 'Middle East' }
+        };
+        
+        this.currentRegion = 'california';
+        
         // Initialize
         this.initMap();
         this.initCanvas();
@@ -56,6 +72,12 @@ class FlightTrailsApp {
     }
     
     initControls() {
+        // Region selector
+        const regionSelect = document.getElementById('region-select');
+        regionSelect.addEventListener('change', (e) => {
+            this.changeRegion(e.target.value);
+        });
+        
         document.getElementById('refresh-btn').addEventListener('click', () => {
             this.loadFlights();
         });
@@ -75,6 +97,22 @@ class FlightTrailsApp {
             this.animationSpeed = speeds[speedIndex];
             speedBtn.textContent = `⚡ ${speeds[speedIndex]}x`;
         });
+    }
+    
+    changeRegion(regionKey) {
+        const region = this.regions[regionKey];
+        if (!region) return;
+        
+        this.currentRegion = regionKey;
+        
+        // Clear existing flights
+        this.flights.clear();
+        
+        // Update map view
+        this.map.setView(region.center, region.zoom);
+        
+        // Update title
+        document.querySelector('#header h1').textContent = `✈️ ${region.name} Flight Trails`;
     }
     
     onMapMove() {
