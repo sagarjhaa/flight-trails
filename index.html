@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>California Flight Trails</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <div id="map"></div>
+        <canvas id="trails-canvas"></canvas>
+        
+        <div id="header">
+            <h1>✈️ California Flight Trails</h1>
+            <p>Live flights with contrail visualization</p>
+        </div>
+        
+        <div id="stats">
+            <div class="stat">
+                <span class="stat-value" id="flight-count">0</span>
+                <span class="stat-label">Active Flights</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value" id="avg-altitude">0</span>
+                <span class="stat-label">Avg Altitude (ft)</span>
+            </div>
+        </div>
+        
+        <div id="controls">
+            <button id="refresh-btn" title="Refresh flight data">🔄 Refresh</button>
+            <button id="toggle-trails" title="Toggle trails">💨 Trails</button>
+            <button id="speed-btn" title="Animation speed">⚡ 1x</button>
+        </div>
+        
+        <div id="tooltip" class="hidden"></div>
+        <div id="loading">
+            <div class="spinner"></div>
+            <p>Loading flight data...</p>
+        </div>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
